@@ -7,22 +7,55 @@ from app.llm import get_llm
 
 SYSTEM_PROMPT = """You are an email notification agent summarizing ops log analysis.
 Create a concise plain-text email with a subject, body, and optional html_body.
-Include run ID, issue count, top severities, top 3 fixes, and a clear action recommendation.
+Include run ID, issue count, top severities, top 3 fixes, full JIRA ticket drafts, and a clear action recommendation.
 Return JSON with subject, body, and html_body."""
+
+
+def _format_jira_tickets(state: AgentState) -> str:
+    jira_tickets = state.get("jira_tickets", [])
+    if not jira_tickets:
+        return ""
+
+    ticket_texts = []
+    for ticket in jira_tickets:
+        ticket_texts.append(
+            """
+JIRA Ticket Draft
+Issue ID: {issue_id}
+Summary: {summary}
+Description: {description}
+Priority: {priority}
+Issue Type: {issuetype}
+""".strip().format(
+                issue_id=ticket.get("issue_id", ""),
+                summary=ticket.get("summary", ""),
+                description=ticket.get("description", ""),
+                priority=ticket.get("priority", ""),
+                issuetype=ticket.get("issuetype", ""),
+            )
+        )
+    return "\n\n".join(ticket_texts)
 
 
 def _build_fallback_payload(state: AgentState) -> dict[str, Any]:
     issues = state.get("issues", [])
+    jira_details = _format_jira_tickets(state)
     if not issues:
+        body = f"Run ID: {state['run_id']}\n\nNo operational issues were detected."
+        if jira_details:
+            body += f"\n\n{jira_details}"
         return {
             "subject": f"Ops Log Analysis [{state['run_id']}] — all clear",
-            "body": f"Run ID: {state['run_id']}\n\nNo operational issues were detected.",
+            "body": body,
         }
 
     lines = "\n".join(f"- [{issue.severity.upper()}] {issue.title}: {issue.summary}" for issue in issues[:5])
+    body = f"Run ID: {state['run_id']}\n\nIssues:\n{lines}"
+    if jira_details:
+        body += f"\n\n{jira_details}"
     return {
         "subject": f"Ops Log Alert [{state['run_id']}] — {len(issues)} issues detected",
-        "body": f"Run ID: {state['run_id']}\n\nIssues:\n{lines}",
+        "body": body,
     }
 
 
@@ -37,16 +70,21 @@ def email_node(state: AgentState) -> dict[str, Any]:
             f"- {rem.issue_id}: {rem.fix_steps[0] if rem.fix_steps else 'See runbook'}"
             for rem in state.get("remediations", [])[:3]
         )
+        jira_details = _format_jira_tickets(state)
+        user_content = (
+            f"Run ID: {state['run_id']}\n"
+            f"Issues:\n{issue_summary or 'None'}\n\n"
+            f"Top fixes:\n{fix_summary or 'N/A'}"
+        )
+        if jira_details:
+            user_content += f"\n\nJIRA Tickets:\n{jira_details}"
+
         result = llm.invoke(
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {
                     "role": "user",
-                    "content": (
-                        f"Run ID: {state['run_id']}\n"
-                        f"Issues:\n{issue_summary or 'None'}\n\n"
-                        f"Top fixes:\n{fix_summary or 'N/A'}"
-                    ),
+                    "content": user_content,
                 },
             ]
         )
