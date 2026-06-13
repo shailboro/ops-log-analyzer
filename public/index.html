@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ops Log Analyzer</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --text: #e7ecf3;
+      --muted: #9aa7b8;
+      --accent: #3b82f6;
+      --border: #2a3648;
+      --critical: #ef4444;
+      --high: #f97316;
+      --medium: #eab308;
+      --low: #22c55e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header, main { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+    h1 { margin: 0 0 0.25rem; font-size: 1.75rem; }
+    .subtitle { color: var(--muted); margin-bottom: 1.5rem; }
+    .grid { display: grid; gap: 1rem; grid-template-columns: 280px 1fr; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+    }
+    textarea {
+      width: 100%;
+      min-height: 260px;
+      background: #0b1017;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.85rem;
+    }
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 0.65rem 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      width: 100%;
+      margin-bottom: 0.5rem;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .tabs { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 1rem 0; }
+    .tab {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .tab.active { background: var(--accent); border-color: var(--accent); color: white; }
+    .section { display: none; }
+    .section.active { display: block; }
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .badge.critical { background: color-mix(in srgb, var(--critical) 25%, transparent); color: var(--critical); }
+    .badge.high { background: color-mix(in srgb, var(--high) 25%, transparent); color: var(--high); }
+    .badge.medium { background: color-mix(in srgb, var(--medium) 25%, transparent); color: var(--medium); }
+    .badge.low { background: color-mix(in srgb, var(--low) 25%, transparent); color: var(--low); }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.9rem;
+      margin-bottom: 0.75rem;
+      background: #111827;
+    }
+    pre, .markdown {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #0b1017;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      overflow: auto;
+    }
+    .status { color: var(--muted); font-size: 0.9rem; }
+    .error { color: var(--critical); }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Ops Log Analyzer</h1>
+    <p class="subtitle">Multi-agent log analysis with LangGraph — upload ops logs for classification, fixes, and runbooks.</p>
+  </header>
+  <main>
+    <div class="grid">
+      <aside class="panel">
+        <h3>Samples</h3>
+        <button class="secondary" data-sample="k8s_crashloop.log">k8s_crashloop.log</button>
+        <button class="secondary" data-sample="db_connection.log">db_connection.log</button>
+        <button class="secondary" data-sample="healthy_with_warnings.log">healthy_with_warnings.log</button>
+        <p class="status" id="health-status">Checking API…</p>
+      </aside>
+      <section class="panel">
+        <textarea id="logs" placeholder="Paste logs here or load a sample…"></textarea>
+        <div style="margin-top: 0.75rem; display: flex; gap: 0.75rem; align-items: center;">
+          <button id="analyze-btn">Analyze</button>
+          <span class="status" id="run-status"></span>
+        </div>
+      </section>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="trace">Live Trace</button>
+      <button class="tab" data-tab="findings">Findings</button>
+      <button class="tab" data-tab="fixes">Fixes</button>
+      <button class="tab" data-tab="cookbook">Cookbook</button>
+      <button class="tab" data-tab="outputs">Outputs</button>
+    </div>
+
+    <div id="trace" class="section panel active"></div>
+    <div id="findings" class="section panel"></div>
+    <div id="fixes" class="section panel"></div>
+    <div id="cookbook" class="section panel"></div>
+    <div id="outputs" class="section panel"></div>
+  </main>
+
+  <script>
+    const AGENT_ORDER = [
+      "LogReaderClassifier",
+      "RemediationAgent",
+      "CookbookSynthesizer",
+      "NotificationAgent",
+      "JiraTicketAgent",
+    ];
+
+    let currentFilename = null;
+
+    async function checkHealth() {
+      const el = document.getElementById("health-status");
+      try {
+        const res = await fetch("/health");
+        const data = await res.json();
+        el.textContent = `API ok · LLM ${data.llm_configured === "True" ? "ready" : "missing key"} · Slack ${data.slack_mode} · JIRA ${data.jira_mode}`;
+      } catch {
+        el.textContent = "API unreachable";
+        el.classList.add("error");
+      }
+    }
+
+    async function loadSample(name) {
+      const res = await fetch(`/samples/${name}`);
+      document.getElementById("logs").value = await res.text();
+      currentFilename = name;
+    }
+
+    function setTab(name) {
+      document.querySelectorAll(".tab").forEach((btn) => btn.classList.toggle("active", btn.dataset.tab === name));
+      document.querySelectorAll(".section").forEach((sec) => sec.classList.toggle("active", sec.id === name));
+    }
+
+    function renderTrace(events) {
+      const seen = new Set(events.map((e) => e.agent));
+      const lines = AGENT_ORDER.map((agent) => {
+        const agentEvents = events.filter((e) => e.agent === agent);
+        if (!agentEvents.length) return `<div>⬜ <strong>${agent}</strong> — pending</div>`;
+        const latest = agentEvents[agentEvents.length - 1];
+        const icon = { completed: "✅", started: "🔄", skipped: "⏭️", error: "❌" }[latest.status] || "•";
+        return `<div>${icon} <strong>${agent}</strong> — ${latest.summary || ""}<div class="status">${latest.ts || ""}</div></div>`;
+      });
+      document.getElementById("trace").innerHTML = lines.join("");
+    }
+
+    function renderFindings(state) {
+      const issues = state.issues || [];
+      if (!issues.length) {
+        document.getElementById("findings").innerHTML = "<p>No operational issues detected.</p>";
+        return;
+      }
+      document.getElementById("findings").innerHTML = issues.map((issue) => `
+        <div class="card">
+          <span class="badge ${issue.severity}">${issue.severity}</span>
+          <strong>${issue.title}</strong>
+          <p>${issue.summary}</p>
+          <p class="status">${issue.evidence || ""}</p>
+        </div>
+      `).join("");
+    }
+
+    function renderFixes(state) {
+      const remediations = state.remediations || [];
+      if (!remediations.length) {
+        document.getElementById("fixes").innerHTML = "<p>No remediations generated.</p>";
+        return;
+      }
+      document.getElementById("fixes").innerHTML = remediations.map((fix) => `
+        <div class="card">
+          <strong>${fix.issue_title}</strong>
+          <p>${fix.rationale}</p>
+          <ol>${(fix.steps || []).map((step) => `<li>${step}</li>`).join("")}</ol>
+        </div>
+      `).join("");
+    }
+
+    function renderCookbook(state) {
+      const md = state.cookbook_markdown || "";
+      document.getElementById("cookbook").innerHTML = `<pre class="markdown">${md.replace(/</g, "&lt;")}</pre>`;
+    }
+
+    function renderOutputs(state) {
+      const slack = state.slack_payloads || [];
+      const jira = state.jira_tickets || [];
+      document.getElementById("outputs").innerHTML = `
+        <h3>Slack</h3>
+        ${slack.length ? `<pre>${JSON.stringify(slack, null, 2)}</pre>` : "<p>No Slack payloads.</p>"}
+        <h3>JIRA</h3>
+        ${jira.length ? `<pre>${JSON.stringify(jira, null, 2)}</pre>` : "<p>No JIRA tickets.</p>"}
+      `;
+    }
+
+    async function pollRun(runId) {
+      const statusEl = document.getElementById("run-status");
+      for (let i = 0; i < 180; i++) {
+        const res = await fetch(`/runs/${runId}`);
+        if (!res.ok) throw new Error("Failed to fetch run");
+        const data = await res.json();
+        renderTrace(data.events || []);
+        statusEl.textContent = `Run ${runId} — ${data.status}`;
+        if (data.status === "completed") {
+          const state = data.state || {};
+          renderFindings(state);
+          renderFixes(state);
+          renderCookbook(state);
+          renderOutputs(state);
+          return;
+        }
+        if (data.status === "failed") {
+          statusEl.innerHTML = `<span class="error">${data.error || "Analysis failed"}</span>`;
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      statusEl.textContent = "Timed out waiting for analysis.";
+    }
+
+    async function analyze() {
+      const logs = document.getElementById("logs").value.trim();
+      if (!logs) return;
+      const btn = document.getElementById("analyze-btn");
+      const statusEl = document.getElementById("run-status");
+      btn.disabled = true;
+      statusEl.textContent = "Starting analysis…";
+      try {
+        const res = await fetch("/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ logs, filename: currentFilename }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || res.statusText);
+        }
+        const { run_id, status } = await res.json();
+        if (status === "completed" || status === "failed") {
+          await pollRun(run_id);
+        } else {
+          statusEl.textContent = `Run ${run_id} started…`;
+          await pollRun(run_id);
+        }
+      } catch (err) {
+        statusEl.innerHTML = `<span class="error">${err.message}</span>`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    document.querySelectorAll("[data-sample]").forEach((btn) => {
+      btn.addEventListener("click", () => loadSample(btn.dataset.sample));
+    });
+    document.querySelectorAll(".tab").forEach((btn) => {
+      btn.addEventListener("click", () => setTab(btn.dataset.tab));
+    });
+    document.getElementById("analyze-btn").addEventListener("click", analyze);
+    checkHealth();
+  </script>
+</body>
+</html>

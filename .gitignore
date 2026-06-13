@@ -10,3 +10,4 @@ runs/
 .pytest_cache/
 dist/
 build/
+.vercel/

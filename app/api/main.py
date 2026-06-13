@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import uuid
 from typing import Any
 
@@ -62,6 +63,13 @@ async def analyze(request: AnalyzeRequest, background_tasks: BackgroundTasks) ->
 
     run_id = str(uuid.uuid4())
     await run_store.create_run(run_id, request.logs, request.filename)
+
+    if os.environ.get("VERCEL"):
+        await _execute_run(run_id, request.logs, request.filename)
+        record = await run_store.get_run(run_id)
+        status = record.status if record else "failed"
+        return AnalyzeResponse(run_id=run_id, status=status)
+
     background_tasks.add_task(_execute_run, run_id, request.logs, request.filename)
     return AnalyzeResponse(run_id=run_id, status="running")
 

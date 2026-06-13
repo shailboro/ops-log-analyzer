@@ -120,6 +120,28 @@ Streamlit UI → FastAPI → LangGraph Orchestrator
 
 Run artifacts are persisted to `runs/{run_id}/state.json` for post-demo inspection.
 
+## Deploy to Vercel
+
+The FastAPI backend and a static web UI deploy to [Vercel](https://vercel.com). Streamlit remains for local development only.
+
+1. Install the Vercel CLI: `npm i -g vercel`
+2. Link the project to your Vercel team:
+   ```bash
+   vercel link --scope shailborocloud-9996s-projects
+   ```
+3. Set environment variables in the Vercel dashboard (or via CLI):
+   ```bash
+   vercel env add OPENROUTER_API_KEY
+   vercel env add LLM_PROVIDER production
+   ```
+   Use `openrouter` for `LLM_PROVIDER`.
+4. Deploy:
+   ```bash
+   vercel deploy --prod
+   ```
+
+On Vercel, analysis runs synchronously in the `/analyze` request (up to 300s). Run state is stored under `/tmp/runs` for the duration of the function instance.
+
 ## License
 
 MIT — hackathon demo project.

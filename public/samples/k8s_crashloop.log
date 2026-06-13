@@ -1,0 +1,11 @@
+2026-06-13T08:12:01.123Z ERROR kubelet pod=payment-api-7d4f8b9c6-xk2m9 msg="Container payment-api failed liveness probe"
+2026-06-13T08:12:02.456Z WARN kube-scheduler pod=payment-api-7d4f8b9c6-xk2m9 msg="Back-off restarting failed container payment-api in pod payment-api_default"
+2026-06-13T08:12:05.789Z ERROR kubelet pod=payment-api-7d4f8b9c6-xk2m9 msg="CrashLoopBackOff: container payment-api is crash looping"
+2026-06-13T08:12:08.012Z ERROR payment-api OOMKilled: container exceeded memory limit of 512Mi
+2026-06-13T08:12:10.334Z FATAL payment-api java.lang.OutOfMemoryError: Java heap space
+2026-06-13T08:12:15.667Z ERROR kubelet pod=inventory-svc-abc123 msg="Failed to pull image registry.example.com/inventory:v2.3.1: manifest unknown"
+2026-06-13T08:12:16.890Z ERROR kubelet pod=inventory-svc-abc123 msg="ErrImagePull: manifest for registry.example.com/inventory:v2.3.1 not found"
+2026-06-13T08:12:20.113Z WARN kubelet pod=inventory-svc-abc123 msg="ImagePullBackOff: Back-off pulling image registry.example.com/inventory:v2.3.1"
+2026-06-13T08:12:25.336Z ERROR deployment-controller deployment=payment-api msg="ReplicaSet payment-api-7d4f8b9c6 has failed progress deadline"
+2026-06-13T08:12:30.559Z ERROR kubelet node=worker-3 msg="NodeNotReady: PLEG is not healthy"
+2026-06-13T08:12:35.782Z WARN metrics-server msg="Unable to fetch metrics for pod payment-api-7d4f8b9c6-xk2m9: pod metrics unavailable"

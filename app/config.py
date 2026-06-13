@@ -1,5 +1,7 @@
+import os
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +28,15 @@ class Settings(BaseSettings):
     jira_project_key: str | None = None
 
     runs_dir: str = "runs"
+
+    @model_validator(mode="after")
+    def apply_platform_defaults(self) -> "Settings":
+        if os.environ.get("VERCEL"):
+            self.runs_dir = "/tmp/runs"
+            vercel_url = os.environ.get("VERCEL_URL")
+            if vercel_url:
+                self.api_base_url = f"https://{vercel_url}"
+        return self
 
     @property
     def slack_configured(self) -> bool:

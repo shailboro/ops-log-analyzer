@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -35,18 +36,21 @@ class RunStore:
                 },
             )
             self._runs[run_id] = record
+            self._persist_record(record)
             return record
 
     async def append_event(self, run_id: str, event: dict[str, Any]) -> None:
         async with self._lock:
             record = self._require(run_id)
             record.events.append(event)
+            self._persist_record(record)
 
     async def complete_run(self, run_id: str, state: AgentState) -> None:
         async with self._lock:
             record = self._require(run_id)
             record.status = "completed"
             record.state = self._serialize_state(state)
+            self._persist_record(record)
             self._persist_artifact(run_id, record.state)
 
     async def fail_run(self, run_id: str, error: str, partial_state: dict[str, Any] | None = None) -> None:
@@ -56,10 +60,14 @@ class RunStore:
             record.error = error
             if partial_state:
                 record.state = partial_state
+            self._persist_record(record)
 
     async def get_run(self, run_id: str) -> RunRecord | None:
         async with self._lock:
-            return self._runs.get(run_id)
+            record = self._runs.get(run_id)
+            if record:
+                return record
+            return self._load_record(run_id)
 
     def _require(self, run_id: str) -> RunRecord:
         record = self._runs.get(run_id)
@@ -82,6 +90,36 @@ class RunStore:
             "trace": state.get("trace", []),
             "error": state.get("error"),
         }
+
+    def _record_path(self, run_id: str) -> Path:
+        return Path(self.settings.runs_dir) / run_id / "record.json"
+
+    def _persist_record(self, record: RunRecord) -> None:
+        path = self._record_path(record.run_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "run_id": record.run_id,
+            "status": record.status,
+            "state": record.state,
+            "events": record.events,
+            "error": record.error,
+        }
+        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    def _load_record(self, run_id: str) -> RunRecord | None:
+        path = self._record_path(run_id)
+        if not path.exists():
+            return None
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        record = RunRecord(
+            run_id=payload["run_id"],
+            status=payload.get("status", "pending"),
+            state=payload.get("state", {}),
+            events=payload.get("events", []),
+            error=payload.get("error"),
+        )
+        self._runs[run_id] = record
+        return record
 
     def _persist_artifact(self, run_id: str, state: dict[str, Any]) -> None:
         runs_dir = Path(self.settings.runs_dir) / run_id
