@@ -1,0 +1,11 @@
+2026-06-13T09:00:01.100Z INFO api-gateway request_id=req-8842 method=GET path=/health status=200 latency_ms=12
+2026-06-13T09:00:02.200Z WARN order-service connection_pool active=48 max=50 msg="Connection pool nearing capacity"
+2026-06-13T09:00:03.300Z ERROR order-service HikariPool-1 - Connection is not available, request timed out after 30000ms
+2026-06-13T09:00:04.400Z ERROR order-service SQLException: Unable to acquire JDBC Connection
+2026-06-13T09:00:05.500Z ERROR api-gateway request_id=req-8843 upstream=order-service status=503 msg="Upstream service unavailable"
+2026-06-13T09:00:06.600Z WARN order-service connection_pool active=50 max=50 waiting=23 msg="All connections in use"
+2026-06-13T09:00:07.700Z ERROR order-service db_host=postgres-primary.example.com msg="FATAL: too many connections for role order_app"
+2026-06-13T09:00:08.800Z ERROR postgres primary msg="remaining connection slots are reserved for non-replication superuser connections"
+2026-06-13T09:00:10.900Z ERROR checkout-service request_id=req-8844 msg="Transaction rollback: could not connect to database"
+2026-06-13T09:00:12.000Z WARN pgbouncer pool=order_pool msg="Client queue length exceeded threshold: 100"
+2026-06-13T09:00:15.100Z ERROR order-service msg="Circuit breaker OPEN for postgres-primary after 15 consecutive failures"

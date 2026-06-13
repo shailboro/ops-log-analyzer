@@ -1,0 +1,10 @@
+2026-06-13T10:00:00.000Z INFO nginx access 10.0.1.5 - - "GET / HTTP/1.1" 200 1024
+2026-06-13T10:00:01.100Z INFO app-server startup complete, listening on :8080
+2026-06-13T10:00:02.200Z INFO health-check /health returned 200 in 5ms
+2026-06-13T10:00:03.300Z WARN app-server cache miss rate=12% threshold=10% msg="Cache miss rate above target"
+2026-06-13T10:00:04.400Z INFO app-server processed 1542 requests in last minute
+2026-06-13T10:00:05.500Z WARN app-server disk usage /var/log at 78% capacity
+2026-06-13T10:00:06.600Z INFO nginx access 10.0.1.8 - - "GET /api/status HTTP/1.1" 200 256
+2026-06-13T10:00:07.700Z INFO metrics-agent scraped 42 targets successfully
+2026-06-13T10:00:08.800Z WARN app-server slow query detected duration_ms=850 threshold_ms=500
+2026-06-13T10:00:09.900Z INFO app-server graceful shutdown signal received (dry-run test)
