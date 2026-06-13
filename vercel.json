@@ -2,7 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/index.py": {
-      "runtime": "python3.11",
       "maxDuration": 300,
       "excludeFiles": "{.venv,venv,runs,.ruff_cache,.pytest_cache,**/__pycache__/**,**/*.pyc,app/streamlit_app.py}/**"
     }
