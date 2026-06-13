@@ -1,8 +1,16 @@
 from typing import Any
 
+from pydantic import BaseModel
+
 from app.graph.state import AgentState, append_trace
 from app.integrations.email import get_email_client
 from app.llm import get_llm
+
+
+class EmailPayloadOutput(BaseModel):
+    subject: str
+    body: str = ""
+    html_body: str | None = None
 
 
 SYSTEM_PROMPT = """You are an email notification agent summarizing ops log analysis.
@@ -59,6 +67,28 @@ def _build_fallback_payload(state: AgentState) -> dict[str, Any]:
     }
 
 
+def _build_default_email_body(state: AgentState) -> str:
+    issues = state.get("issues", [])
+    issue_lines = "\n".join(f"- [{issue.severity.upper()}] {issue.title}: {issue.summary}" for issue in issues[:5])
+    fix_lines = "\n".join(
+        f"- {rem.issue_id}: {rem.fix_steps[0] if rem.fix_steps else 'See runbook'}"
+        for rem in state.get("remediations", [])[:3]
+    )
+    jira_details = _format_jira_tickets(state)
+
+    parts = [f"Run ID: {state['run_id']}\n"]
+    if issue_lines:
+        parts.append(f"Issues:\n{issue_lines}")
+    else:
+        parts.append("No operational issues were detected.")
+
+    if fix_lines:
+        parts.append(f"\nTop fixes:\n{fix_lines}")
+    if jira_details:
+        parts.append(f"\nJIRA Tickets:\n{jira_details}")
+    return "\n\n".join(parts)
+
+
 def email_node(state: AgentState) -> dict[str, Any]:
     trace = append_trace(state.get("trace", []), "EmailNotificationAgent", "started", "Building email notification")
     try:
@@ -79,7 +109,7 @@ def email_node(state: AgentState) -> dict[str, Any]:
         if jira_details:
             user_content += f"\n\nJIRA Tickets:\n{jira_details}"
 
-        result = llm.invoke(
+        result: EmailPayloadOutput = get_llm().with_structured_output(EmailPayloadOutput).invoke(
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {
@@ -88,10 +118,11 @@ def email_node(state: AgentState) -> dict[str, Any]:
                 },
             ]
         )
+        body = result.body.strip() or _build_default_email_body(state)
         payload = {
-            "subject": getattr(result, "subject", f"Ops Log Alert [{state['run_id']} ]"),
-            "body": getattr(result, "body", ""),
-            "html_body": getattr(result, "html_body", None),
+            "subject": result.subject,
+            "body": body,
+            "html_body": result.html_body,
         }
     except Exception:
         payload = _build_fallback_payload(state)
