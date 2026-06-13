@@ -18,8 +18,7 @@ def _fan_out_outputs(state: AgentState) -> list[Send]:
     critical = [i for i in state.get("issues", []) if i.severity.lower() in {"critical", "high"}]
     if critical:
         sends.append(Send("jira", state))
-    if get_settings().email_configured:
-        sends.append(Send("email", state))
+    sends.append(Send("email", state))
     return sends
 
 
