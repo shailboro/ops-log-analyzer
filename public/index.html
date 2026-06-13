@@ -110,6 +110,7 @@
   <header>
     <h1>Ops Log Analyzer</h1>
     <p class="subtitle">Multi-agent log analysis with LangGraph — upload ops logs for classification, fixes, and runbooks.</p>
+    <p class="status" style="margin-top: 0.5rem; font-size: 0.95rem;">By - C7 | Hackathon Group 13</p>
   </header>
   <main>
     <div class="grid">
@@ -121,6 +122,13 @@
         <p class="status" id="health-status">Checking API…</p>
       </aside>
       <section class="panel">
+        <div style="margin-bottom: 0.75rem; display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+          <label class="secondary" for="log-file" style="cursor: pointer; margin-bottom: 0;">Choose log file</label>
+          <input type="file" id="log-file" accept=".log,.txt" style="display: none;" />
+          <span class="status" id="file-name">No file selected</span>
+          <button class="secondary" id="clear-file-btn" type="button">Clear file</button>
+        </div>
+        <p class="status" style="margin-top: -0.5rem; margin-bottom: 0.75rem;">Max file size: 2 MB. Accepted: .log, .txt.</p>
         <textarea id="logs" placeholder="Paste logs here or load a sample…"></textarea>
         <div style="margin-top: 0.75rem; display: flex; gap: 0.75rem; align-items: center;">
           <button id="analyze-btn">Analyze</button>
@@ -153,6 +161,7 @@
       "JiraTicketAgent",
     ];
 
+    const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 MB
     let currentFilename = null;
 
     async function checkHealth() {
@@ -171,6 +180,37 @@
       const res = await fetch(`/samples/${name}`);
       document.getElementById("logs").value = await res.text();
       currentFilename = name;
+      document.getElementById("log-file").value = "";
+      updateFileStatus(`Loaded sample: ${name}`);
+    }
+
+    function updateFileStatus(name) {
+      document.getElementById("file-name").textContent = name ? `File: ${name}` : "No file selected";
+    }
+
+    async function handleFileUpload(event) {
+      const file = event.target.files?.[0];
+      if (!file) {
+        clearFile();
+        return;
+      }
+      if (file.size > MAX_FILE_BYTES) {
+        const sizeMb = (MAX_FILE_BYTES / 1024 / 1024).toFixed(1);
+        alert(`File is too large. Please upload a file smaller than ${sizeMb} MB.`);
+        clearFile();
+        return;
+      }
+      currentFilename = file.name;
+      const text = await file.text();
+      document.getElementById("logs").value = text;
+      updateFileStatus(file.name);
+    }
+
+    function clearFile() {
+      document.getElementById("log-file").value = "";
+      document.getElementById("logs").value = "";
+      currentFilename = null;
+      updateFileStatus("");
     }
 
     function setTab(name) {
@@ -299,6 +339,8 @@
     document.querySelectorAll(".tab").forEach((btn) => {
       btn.addEventListener("click", () => setTab(btn.dataset.tab));
     });
+    document.getElementById("log-file").addEventListener("change", handleFileUpload);
+    document.getElementById("clear-file-btn").addEventListener("click", clearFile);
     document.getElementById("analyze-btn").addEventListener("click", analyze);
     checkHealth();
   </script>
