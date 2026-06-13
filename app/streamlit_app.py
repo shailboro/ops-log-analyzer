@@ -126,6 +126,17 @@ def render_outputs(state: dict) -> None:
             for ticket in state.get("jira_tickets", []):
                 st.json(ticket)
 
+    with st.expander("Email"):
+        results = state.get("email_results", [])
+        mode = results[0].get("mode", "mock") if results else "mock"
+        st.caption(f"Mode: **{mode}**")
+        email_payloads = state.get("email_payloads", [])
+        if not email_payloads:
+            st.info("No Email notifications generated.")
+        else:
+            for payload in email_payloads:
+                st.json(payload)
+
 
 def main() -> None:
     settings = get_settings()
@@ -143,6 +154,7 @@ def main() -> None:
         st.write(f"LLM: `{settings.llm_provider}` ({'configured' if settings.llm_configured else 'missing key'})")
         st.write(f"Slack: {'live' if settings.slack_configured else 'mock'}")
         st.write(f"JIRA: {'live' if settings.jira_configured else 'mock'}")
+        st.write(f"Email: {'live' if settings.email_configured else 'mock'}")
         st.divider()
         st.subheader("Sample logs")
         if st.button("Load k8s_crashloop.log"):

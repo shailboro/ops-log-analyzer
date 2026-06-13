@@ -86,6 +86,8 @@ class RunStore:
             "slack_payloads": state.get("slack_payloads", []),
             "jira_tickets": state.get("jira_tickets", []),
             "slack_results": state.get("slack_results", []),
+            "email_payloads": state.get("email_payloads", []),
+            "email_results": state.get("email_results", []),
             "jira_results": state.get("jira_results", []),
             "trace": state.get("trace", []),
             "error": state.get("error"),

@@ -27,10 +27,21 @@ class Settings(BaseSettings):
     jira_api_token: str | None = None
     jira_project_key: str | None = None
 
+    email_smtp_host: str | None = None
+    email_smtp_port: int | None = None
+    email_smtp_username: str | None = None
+    email_smtp_password: str | None = None
+    email_use_tls: bool = True
+    email_use_ssl: bool = False
+
+    email_from: str | None = None
+    email_to: str | None = None
+
     runs_dir: str = "runs"
 
     @model_validator(mode="after")
     def apply_platform_defaults(self) -> "Settings":
+
         if os.environ.get("VERCEL"):
             self.runs_dir = "/tmp/runs"
             vercel_url = os.environ.get("VERCEL_URL")
@@ -49,6 +60,15 @@ class Settings(BaseSettings):
             and self.jira_email
             and self.jira_api_token
             and self.jira_project_key
+        )
+
+    @property
+    def email_configured(self) -> bool:
+        return bool(
+            self.email_smtp_host
+            and self.email_smtp_port
+            and self.email_from
+            and self.email_to
         )
 
     @property

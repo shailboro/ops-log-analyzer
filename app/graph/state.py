@@ -73,6 +73,8 @@ class AgentState(TypedDict):
     slack_payloads: list[dict[str, Any]]
     jira_tickets: list[dict[str, Any]]
     slack_results: list[dict[str, Any]]
+    email_payloads: list[dict[str, Any]]
+    email_results: list[dict[str, Any]]
     jira_results: list[dict[str, Any]]
     trace: Annotated[list[dict[str, Any]], merge_trace]
     error: str | None
@@ -90,6 +92,8 @@ def initial_state(run_id: str, raw_logs: str, filename: str | None = None) -> Ag
         slack_payloads=[],
         jira_tickets=[],
         slack_results=[],
+        email_payloads=[],
+        email_results=[],
         jira_results=[],
         trace=[],
         error=None,

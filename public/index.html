@@ -159,6 +159,7 @@
       "CookbookSynthesizer",
       "NotificationAgent",
       "JiraTicketAgent",
+      "EmailNotificationAgent",
     ];
 
     const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -169,7 +170,7 @@
       try {
         const res = await fetch("/health");
         const data = await res.json();
-        el.textContent = `API ok · LLM ${data.llm_configured === "True" ? "ready" : "missing key"} · Slack ${data.slack_mode} · JIRA ${data.jira_mode}`;
+        el.textContent = `API ok · LLM ${data.llm_configured === "True" ? "ready" : "missing key"} · Slack ${data.slack_mode} · JIRA ${data.jira_mode} · Email ${data.email_mode}`;
       } catch {
         el.textContent = "API unreachable";
         el.classList.add("error");
@@ -269,11 +270,14 @@
     function renderOutputs(state) {
       const slack = state.slack_payloads || [];
       const jira = state.jira_tickets || [];
+      const email = state.email_payloads || [];
       document.getElementById("outputs").innerHTML = `
         <h3>Slack</h3>
         ${slack.length ? `<pre>${JSON.stringify(slack, null, 2)}</pre>` : "<p>No Slack payloads.</p>"}
         <h3>JIRA</h3>
         ${jira.length ? `<pre>${JSON.stringify(jira, null, 2)}</pre>` : "<p>No JIRA tickets.</p>"}
+        <h3>Email</h3>
+        ${email.length ? `<pre>${JSON.stringify(email, null, 2)}</pre>` : "<p>No Email payloads.</p>"}
       `;
     }
 

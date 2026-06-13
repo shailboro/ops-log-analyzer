@@ -107,6 +107,19 @@ JIRA_API_TOKEN=your-api-token
 JIRA_PROJECT_KEY=OPS
 ```
 
+**Email:**
+
+```
+EMAIL_SMTP_HOST=smtp.example.com
+EMAIL_SMTP_PORT=587
+EMAIL_SMTP_USERNAME=your-smtp-user
+EMAIL_SMTP_PASSWORD=your-smtp-password
+EMAIL_USE_TLS=true
+EMAIL_USE_SSL=false
+EMAIL_FROM=ops-alerts@example.com
+EMAIL_TO=team@example.com
+```
+
 ## Architecture
 
 ```

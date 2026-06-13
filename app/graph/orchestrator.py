@@ -2,6 +2,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
 from app.agents.cookbook import cookbook_node
+from app.agents.email_agent import email_node
 from app.agents.jira_agent import jira_node
 from app.agents.log_reader import log_reader_node
 from app.agents.notification import notification_node
@@ -12,11 +13,13 @@ from app.services.run_store import run_store
 
 
 def _fan_out_outputs(state: AgentState) -> list[Send]:
-    """Parallel fan-out to Slack and JIRA after cookbook."""
+    """Parallel fan-out to Slack, JIRA, and Email after cookbook."""
     sends = [Send("notification", state)]
     critical = [i for i in state.get("issues", []) if i.severity.lower() in {"critical", "high"}]
     if critical:
         sends.append(Send("jira", state))
+    if get_settings().email_configured:
+        sends.append(Send("email", state))
     return sends
 
 
@@ -27,13 +30,15 @@ def build_graph():
     graph.add_node("remediation", remediation_node)
     graph.add_node("cookbook", cookbook_node)
     graph.add_node("notification", notification_node)
+    graph.add_node("email", email_node)
     graph.add_node("jira", jira_node)
 
     graph.add_edge(START, "log_reader")
     graph.add_edge("log_reader", "remediation")
     graph.add_edge("remediation", "cookbook")
-    graph.add_conditional_edges("cookbook", _fan_out_outputs, ["notification", "jira"])
+    graph.add_conditional_edges("cookbook", _fan_out_outputs, ["notification", "jira", "email"])
     graph.add_edge("notification", END)
+    graph.add_edge("email", END)
     graph.add_edge("jira", END)
 
     return graph.compile()
