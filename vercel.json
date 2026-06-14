@@ -8,5 +8,8 @@
   ],
   "redirects": [
     { "source": "/", "destination": "/index.html", "permanent": false }
-  ]
+  ],
+  "github": {
+    "productionBranch": "main.v5"
+  }
 }
