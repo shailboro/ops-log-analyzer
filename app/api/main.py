@@ -4,7 +4,7 @@ import os
 import uuid
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import APIRouter, BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
@@ -14,6 +14,7 @@ from app.graph.orchestrator import run_analysis
 from app.services.run_store import run_store
 
 app = FastAPI(title="Ops Log Analyzer API", version="0.1.0")
+router = APIRouter()
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,7 +35,7 @@ class AnalyzeResponse(BaseModel):
     status: str
 
 
-@app.get("/health")
+@router.get("/health")
 async def health() -> dict[str, str]:
     settings = get_settings()
     return {
@@ -54,7 +55,7 @@ async def _execute_run(run_id: str, logs: str, filename: str | None) -> None:
         await run_store.fail_run(run_id, str(exc))
 
 
-@app.post("/analyze", response_model=AnalyzeResponse)
+@router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(request: AnalyzeRequest, background_tasks: BackgroundTasks) -> AnalyzeResponse:
     settings = get_settings()
     if not settings.llm_configured:
@@ -76,7 +77,7 @@ async def analyze(request: AnalyzeRequest, background_tasks: BackgroundTasks) ->
     return AnalyzeResponse(run_id=run_id, status="running")
 
 
-@app.get("/runs/{run_id}")
+@router.get("/runs/{run_id}")
 async def get_run(run_id: str) -> dict[str, Any]:
     record = await run_store.get_run(run_id)
     if not record:
@@ -90,7 +91,7 @@ async def get_run(run_id: str) -> dict[str, Any]:
     }
 
 
-@app.get("/runs/{run_id}/events")
+@router.get("/runs/{run_id}/events")
 async def stream_events(run_id: str) -> EventSourceResponse:
     record = await run_store.get_run(run_id)
     if not record:
@@ -119,3 +120,9 @@ async def stream_events(run_id: str) -> EventSourceResponse:
             await asyncio.sleep(0.5)
 
     return EventSourceResponse(event_generator())
+
+
+# Local dev (uvicorn): /health, /analyze, ...
+app.include_router(router)
+# Vercel api/index.py: /api/health, /api/analyze, ...
+app.include_router(router, prefix="/api")

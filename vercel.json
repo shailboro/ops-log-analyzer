@@ -1,12 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "outputDirectory": "public",
-  "rewrites": [
-    { "source": "/health", "destination": "/api/health" },
-    { "source": "/analyze", "destination": "/api/analyze" },
-    { "source": "/runs/:path*", "destination": "/api/runs/:path*" }
-  ],
-  "redirects": [
-    { "source": "/", "destination": "/index.html", "permanent": false }
-  ]
+  "functions": {
+    "api/**/*.py": {
+      "maxDuration": 300,
+      "excludeFiles": "{.venv,venv,runs,.ruff_cache,.pytest_cache,**/__pycache__/**,**/*.pyc,app/streamlit_app.py}/**"
+    }
+  }
 }
