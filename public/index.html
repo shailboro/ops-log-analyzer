@@ -163,18 +163,16 @@
     ];
 
     const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 MB
-    const API_BASE = "/api";
     let currentFilename = null;
 
     async function checkHealth() {
       const el = document.getElementById("health-status");
       try {
-        const res = await fetch(`${API_BASE}/health`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const res = await fetch("/health");
         const data = await res.json();
         el.textContent = `API ok · LLM ${data.llm_configured === "True" ? "ready" : "missing key"} · Slack ${data.slack_mode} · JIRA ${data.jira_mode} · Email ${data.email_mode}`;
-      } catch (err) {
-        el.textContent = `API unreachable (${err.message})`;
+      } catch {
+        el.textContent = "API unreachable";
         el.classList.add("error");
       }
     }
@@ -296,7 +294,7 @@
     async function pollRun(runId) {
       const statusEl = document.getElementById("run-status");
       for (let i = 0; i < 180; i++) {
-        const res = await fetch(`${API_BASE}/runs/${runId}`);
+        const res = await fetch(`/runs/${runId}`);
         if (!res.ok) throw new Error("Failed to fetch run");
         const data = await res.json();
         renderTrace(data.events || []);
@@ -326,7 +324,7 @@
       btn.disabled = true;
       statusEl.textContent = "Starting analysis…";
       try {
-        const res = await fetch(`${API_BASE}/analyze`, {
+        const res = await fetch("/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ logs, filename: currentFilename }),
