@@ -29,45 +29,56 @@ def _fan_out_outputs(state: AgentState) -> list[Send]:
     return sends
 
 
-async def _store_incidents_in_rag(run_id: str, state: AgentState) -> None:
+async def _store_incidents_in_rag(run_id: str, state: AgentState) -> dict[str, Any]:
     """
     Store analyzed incidents in Pinecone RAG for future retrieval.
-    
-    Args:
-        run_id: Analysis run ID
-        state: Final analysis state with issues and remediations
+
+    Returns storage summary with counts and any errors encountered.
     """
     if not HAS_RAG:
-        return
-    
+        return {"mode": "disabled", "reason": "RAG module unavailable"}
+
     settings = get_settings()
     if not settings.rag_configured:
-        return
-    
+        return {"mode": "disabled", "reason": "PINECONE_API_KEY or PINECONE_INDEX_NAME not set"}
+
+    if not settings.llm_configured:
+        return {
+            "mode": "disabled",
+            "reason": "OPENROUTER_API_KEY required to generate embeddings before storage",
+        }
+
     issues = state.get("issues", [])
     remediations = state.get("remediations", [])
-    
-    # Create a map of remediations by issue_id
+
+    if not issues:
+        return {"mode": "live", "stored_count": 0, "failed_count": 0, "errors": []}
+
     remediation_map = {r.issue_id: r for r in remediations}
-    
+    stored_count = 0
+    failed_count = 0
+    errors: list[str] = []
+
     for issue in issues:
         try:
-            # Embed the issue
-            embedding = await embed_issue({
-                "id": issue.id,
-                "title": issue.title,
-                "description": issue.summary,
-                "severity": issue.severity,
-            })
-            
-            # Get remediation for this issue if exists
+            embedding = await embed_issue(
+                {
+                    "id": issue.id,
+                    "title": issue.title,
+                    "description": issue.summary,
+                    "severity": issue.severity,
+                }
+            )
+
             remediation = remediation_map.get(issue.id)
             remediation_text = None
             if remediation:
-                remediation_text = f"Fix steps: {', '.join(remediation.fix_steps)}. Rationale: {remediation.rationale}"
-            
-            # Store in Pinecone
-            await upsert_incident(
+                remediation_text = (
+                    f"Fix steps: {', '.join(remediation.fix_steps)}. "
+                    f"Rationale: {remediation.rationale}"
+                )
+
+            stored = await upsert_incident(
                 run_id=run_id,
                 issue_id=issue.id,
                 embedding=embedding,
@@ -78,9 +89,23 @@ async def _store_incidents_in_rag(run_id: str, state: AgentState) -> None:
                 },
                 remediation=remediation_text,
             )
-        except Exception as e:
-            print(f"Error storing incident {issue.id} in RAG: {e}")
-            continue
+            if stored:
+                stored_count += 1
+            else:
+                failed_count += 1
+                errors.append(f"{issue.id}: upsert returned false")
+        except Exception as exc:
+            failed_count += 1
+            message = f"{issue.id}: {exc}"
+            errors.append(message)
+            print(f"Error storing incident {issue.id} in RAG: {exc}")
+
+    return {
+        "mode": "live",
+        "stored_count": stored_count,
+        "failed_count": failed_count,
+        "errors": errors[:5],
+    }
 
 
 def build_graph():
@@ -139,12 +164,18 @@ async def run_analysis(run_id: str, raw_logs: str, filename: str | None = None) 
     if final_state is None:
         raise RuntimeError("Graph produced no output")
 
-    await run_store.complete_run(run_id, final_state)
-    
-    # Store incidents in RAG for future retrieval
     try:
-        await _store_incidents_in_rag(run_id, final_state)
-    except Exception as e:
-        print(f"Warning: Failed to store incidents in RAG: {e}")
-    
+        storage_result = await _store_incidents_in_rag(run_id, final_state)
+        final_state["rag_insights"] = {
+            **final_state.get("rag_insights", {}),
+            "storage": storage_result,
+        }
+    except Exception as exc:
+        print(f"Warning: Failed to store incidents in RAG: {exc}")
+        final_state["rag_insights"] = {
+            **final_state.get("rag_insights", {}),
+            "storage": {"mode": "error", "error": str(exc)},
+        }
+
+    await run_store.complete_run(run_id, final_state)
     return final_state

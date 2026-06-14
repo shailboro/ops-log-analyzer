@@ -1,5 +1,6 @@
 """Pinecone client for RAG vector storage and retrieval."""
 
+import logging
 import os
 from datetime import datetime, timedelta
 from functools import lru_cache
@@ -9,78 +10,97 @@ from pinecone import Pinecone
 
 from app.config import get_settings
 
+logger = logging.getLogger(__name__)
+
+EMBEDDING_DIMENSION = 1536
+
+
+def _normalize_index_host(host: str) -> str:
+    host = host.strip()
+    if host.startswith("https://"):
+        return host[len("https://") :]
+    if host.startswith("http://"):
+        return host[len("http://") :]
+    return host
+
+
+def _index_region(settings) -> str:
+    """Resolve serverless region from PINECONE_ENVIRONMENT."""
+    environment = (settings.pinecone_environment or "us-east-1").strip()
+    if environment.startswith("https://") or environment.startswith("http://"):
+        return "us-east-1"
+    if "pinecone.io" in environment:
+        return "us-east-1"
+    if environment.startswith("controller."):
+        return "us-east-1"
+    return environment
+
 
 @lru_cache(maxsize=1)
-def _resolve_pinecone_host(settings) -> str | None:
-    if settings.pinecone_host:
-        return settings.pinecone_host
-
-    env_host = os.environ.get("PINECONE_CONTROLLER_HOST")
-    if env_host:
-        return env_host
-
-    environment = settings.pinecone_environment
-    if not environment:
-        return None
-
-    environment = environment.strip()
-    if environment.startswith("https://") or environment.startswith("http://"):
-        return environment
-    if environment.endswith(".pinecone.io"):
-        return f"https://{environment}" if not environment.startswith("https://") else environment
-    if environment.startswith("controller."):
-        return f"https://{environment}"
-    return f"https://controller.{environment}.pinecone.io"
-
-
 def get_pinecone_client() -> Pinecone | None:
     """
-    Get or initialize Pinecone client.
-    
-    Returns:
-        Pinecone client instance or None if not configured
+    Return the Pinecone control-plane client.
+
+    PINECONE_HOST is the data-plane index host and must not be passed here.
     """
     settings = get_settings()
-    
     if not settings.pinecone_api_key:
         return None
-    
-    return Pinecone(api_key=settings.pinecone_api_key, host=_resolve_pinecone_host(settings))
+
+    client_kwargs: dict[str, Any] = {"api_key": settings.pinecone_api_key}
+    controller_host = os.environ.get("PINECONE_CONTROLLER_HOST")
+    if controller_host:
+        client_kwargs["host"] = controller_host
+
+    return Pinecone(**client_kwargs)
+
+
+def _get_index():
+    settings = get_settings()
+    pc = get_pinecone_client()
+    if not pc:
+        return None
+
+    if settings.pinecone_host:
+        return pc.Index(
+            settings.pinecone_index_name,
+            host=_normalize_index_host(settings.pinecone_host),
+        )
+    return pc.Index(settings.pinecone_index_name)
 
 
 async def init_pinecone() -> bool:
     """
     Initialize Pinecone index if it doesn't exist.
-    
+
     Returns:
         True if successful, False if Pinecone not configured
     """
     settings = get_settings()
-    
+
     if not settings.pinecone_api_key or not settings.pinecone_index_name:
         return False
-    
+
     pc = get_pinecone_client()
     if not pc:
         return False
-    
-    # Check if index exists, create if not
+
     indexes = pc.list_indexes()
     index_names = [idx.name for idx in indexes.indexes]
-    
+
     if settings.pinecone_index_name not in index_names:
         pc.create_index(
             name=settings.pinecone_index_name,
-            dimension=1536,  # OpenAI text-embedding-3-small dimension
+            dimension=EMBEDDING_DIMENSION,
             metric="cosine",
             spec={
                 "serverless": {
                     "cloud": "aws",
-                    "region": settings.pinecone_environment or "us-east-1",
+                    "region": _index_region(settings),
                 }
             },
         )
-    
+
     return True
 
 
@@ -93,29 +113,19 @@ async def upsert_incident(
 ) -> bool:
     """
     Store an incident and optionally its remediation in Pinecone.
-    
-    Args:
-        run_id: Analysis run ID
-        issue_id: Issue identifier
-        embedding: Vector embedding of the issue
-        issue_data: Dict with 'title', 'description', 'severity'
-        remediation: Optional remediation/fix text
-        
+
     Returns:
         True if successful, False if Pinecone not configured
     """
     settings = get_settings()
-    
+
     if not settings.pinecone_api_key or not settings.pinecone_index_name:
         return False
-    
-    pc = get_pinecone_client()
-    if not pc:
+
+    index = _get_index()
+    if not index:
         return False
-    
-    index = pc.Index(settings.pinecone_index_name)
-    
-    # Store issue embedding
+
     metadata = {
         "run_id": run_id,
         "issue_id": issue_id,
@@ -125,19 +135,35 @@ async def upsert_incident(
         "severity": issue_data.get("severity", "unknown"),
         "timestamp": datetime.now().isoformat(),
     }
-    
+
     vector_id = f"{run_id}_{issue_id}_issue"
-    index.upsert(vectors=[(vector_id, embedding, metadata)])
-    
-    # Store remediation if provided
+    response = index.upsert(
+        vectors=[{"id": vector_id, "values": embedding, "metadata": metadata}]
+    )
+    logger.info(
+        "Upserted issue vector %s to index %s (upserted=%s)",
+        vector_id,
+        settings.pinecone_index_name,
+        response.upserted_count,
+    )
+
     if remediation:
-        remediation_metadata = metadata.copy()
-        remediation_metadata["type"] = "remediation"
-        remediation_metadata["remediation"] = remediation
-        
+        remediation_metadata = {
+            **metadata,
+            "type": "remediation",
+            "remediation": remediation,
+        }
         vector_id_rem = f"{run_id}_{issue_id}_remediation"
-        index.upsert(vectors=[(vector_id_rem, embedding, remediation_metadata)])
-    
+        index.upsert(
+            vectors=[
+                {
+                    "id": vector_id_rem,
+                    "values": embedding,
+                    "metadata": remediation_metadata,
+                }
+            ]
+        )
+
     return True
 
 
@@ -146,43 +172,31 @@ async def query_similar_incidents(
     top_k: int = 5,
     severity_filter: str | None = None,
 ) -> list[dict[str, Any]]:
-    """
-    Query Pinecone for similar past incidents.
-    
-    Args:
-        embedding: Vector embedding to search with
-        top_k: Number of similar incidents to return
-        severity_filter: Optional severity to filter by
-        
-    Returns:
-        List of similar incidents with metadata
-    """
+    """Query Pinecone for similar past incidents."""
     settings = get_settings()
-    
+
     if not settings.pinecone_api_key or not settings.pinecone_index_name:
         return []
-    
-    pc = get_pinecone_client()
-    if not pc:
+
+    index = _get_index()
+    if not index:
         return []
-    
-    index = pc.Index(settings.pinecone_index_name)
-    
-    # Build filter for issue type
-    filter_dict = {"type": {"$eq": "issue"}}
-    
+
+    filter_dict: dict[str, Any] = {"type": {"$eq": "issue"}}
     if severity_filter:
         filter_dict["severity"] = {"$eq": severity_filter}
-    
+
     results = index.query(
         vector=embedding,
         top_k=top_k,
         include_metadata=True,
         filter=filter_dict,
     )
-    
+
     incidents = []
     for match in results.matches:
+        if match.metadata is None:
+            continue
         incidents.append(
             {
                 "id": match.metadata.get("issue_id"),
@@ -192,60 +206,49 @@ async def query_similar_incidents(
                 "score": match.score,
             }
         )
-    
+
     return incidents
 
 
 async def query_trend_analysis(days: int = 7) -> dict[str, Any]:
-    """
-    Query Pinecone for incident trends over time.
-    
-    Args:
-        days: Number of days to look back (default 7)
-        
-    Returns:
-        Dict with trend analysis including counts by severity
-    """
+    """Query Pinecone for incident trends over time."""
     settings = get_settings()
-    
+
     if not settings.pinecone_api_key or not settings.pinecone_index_name:
         return {}
-    
-    pc = get_pinecone_client()
-    if not pc:
+
+    index = _get_index()
+    if not index:
         return {}
-    
-    index = pc.Index(settings.pinecone_index_name)
-    
+
     cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
-    
-    # Query all issues in the time window
     filter_dict = {
         "type": {"$eq": "issue"},
         "timestamp": {"$gte": cutoff_date},
     }
-    
+
     results = index.query(
-        vector=[0.0] * 1536,  # Dummy vector, we're filtering only
+        vector=[0.0] * EMBEDDING_DIMENSION,
         top_k=1000,
         include_metadata=True,
         filter=filter_dict,
     )
-    
-    # Aggregate by severity
-    severity_counts = {}
-    issue_titles = []
-    
+
+    severity_counts: dict[str, int] = {}
+    issue_titles: list[str] = []
+
     for match in results.matches:
+        if match.metadata is None:
+            continue
         severity = match.metadata.get("severity", "unknown")
         severity_counts[severity] = severity_counts.get(severity, 0) + 1
         title = match.metadata.get("title", "")
         if title and title not in issue_titles:
             issue_titles.append(title)
-    
+
     return {
         "period_days": days,
         "total_issues": len(results.matches),
         "by_severity": severity_counts,
-        "recent_titles": issue_titles[-5:],  # Last 5 unique titles
+        "recent_titles": issue_titles[-5:],
     }
