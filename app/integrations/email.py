@@ -38,7 +38,7 @@ class EmailClient:
 
         request_payload: dict[str, Any] = {
             "from": self.settings.email_from,
-            "to": recipients,
+            "to": recipients[0] if len(recipients) == 1 else recipients,
             "subject": payload.get("subject", "Ops Log Analyzer Notification"),
             "text": payload.get("body", ""),
         }
@@ -57,7 +57,26 @@ class EmailClient:
             headers=headers,
             timeout=30.0,
         )
-        response.raise_for_status()
+
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            details = None
+            try:
+                details = response.json()
+            except ValueError:
+                details = response.text
+
+            if response.status_code == 403:
+                raise RuntimeError(
+                    "Resend email forbidden: check RESEND_API_KEY and verify the EMAIL_FROM sender address. "
+                    f"Response: {details}"
+                ) from exc
+
+            raise RuntimeError(
+                f"Resend email failed: {response.status_code} {response.reason_phrase} - {details}"
+            ) from exc
+
         data = response.json()
 
         return {

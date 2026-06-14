@@ -1,7 +1,7 @@
 import os
 from functools import lru_cache
 
-from pydantic import model_validator
+from pydantic import EmailStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     resend_api_key: str | None = None
 
-    email_from: str | None = None
+    email_from: EmailStr | None = None
     email_to: str | None = None
 
     runs_dir: str = "runs"
@@ -64,6 +64,16 @@ class Settings(BaseSettings):
             and self.email_from
             and self.email_to
         )
+
+    @model_validator(mode="after")
+    def validate_email_settings(self) -> "Settings":
+        if self.resend_api_key and not self.email_to:
+            raise ValueError("EMAIL_TO is required when RESEND_API_KEY is set")
+        if self.email_to:
+            recipients = [address.strip() for address in self.email_to.split(",") if address.strip()]
+            if not recipients:
+                raise ValueError("EMAIL_TO must contain at least one recipient")
+        return self
 
     @property
     def llm_configured(self) -> bool:
