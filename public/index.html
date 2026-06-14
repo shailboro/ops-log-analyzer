@@ -273,6 +273,8 @@
       const email = state.email_payloads || [];
       const emailResults = state.email_results || [];
       const emailMode = emailResults.length ? emailResults[0].mode : "mock";
+      const ragContext = state.rag_context || [];
+      const ragInsights = state.rag_insights || {};
       document.getElementById("outputs").innerHTML = `
         <h3>Slack</h3>
         ${slack.length ? `<pre>${JSON.stringify(slack, null, 2)}</pre>` : "<p>No Slack payloads.</p>"}
@@ -282,6 +284,10 @@
         <p class="status">Email mode: ${emailMode}</p>
         ${email.length ? `<pre>${JSON.stringify(email, null, 2)}</pre>` : "<p>No Email payloads.</p>"}
         ${emailResults.length ? `<h4>Email send results</h4><pre>${JSON.stringify(emailResults, null, 2)}</pre>` : ""}
+        <h3>RAG</h3>
+        <p class="status">RAG mode: ${ragInsights.mode || "mock"}</p>
+        ${Object.keys(ragInsights).length ? `<pre>${JSON.stringify(ragInsights, null, 2)}</pre>` : "<p>No RAG insights generated.</p>"}
+        ${ragContext.length ? `<h4>Similar incidents</h4><pre>${JSON.stringify(ragContext, null, 2)}</pre>` : "<p>No similar incidents returned.</p>"}
       `;
     }
 

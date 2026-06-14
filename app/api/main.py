@@ -43,6 +43,7 @@ async def health() -> dict[str, str]:
         "slack_mode": "live" if settings.slack_configured else "mock",
         "jira_mode": "live" if settings.jira_configured else "mock",
         "email_mode": "live" if settings.email_configured else "mock",
+        "rag_mode": "live" if settings.rag_configured else "mock",
     }
 
 

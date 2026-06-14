@@ -89,6 +89,8 @@ class RunStore:
             "email_payloads": state.get("email_payloads", []),
             "email_results": state.get("email_results", []),
             "jira_results": state.get("jira_results", []),
+            "rag_context": state.get("rag_context", []),
+            "rag_insights": state.get("rag_insights", {}),
             "trace": state.get("trace", []),
             "error": state.get("error"),
         }
