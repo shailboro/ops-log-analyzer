@@ -37,7 +37,7 @@ class JiraClient:
         body = {
             "fields": {
                 "project": {"key": self.settings.jira_project_key},
-                "summary": payload["summary"],
+                "summary": payload["summary"][:120],
                 "description": {
                     "type": "doc",
                     "version": 1,
@@ -48,12 +48,24 @@ class JiraClient:
                         }
                     ],
                 },
-                "issuetype": {"name": payload.get("issuetype", "Task")},
+                "issuetype": {"name": payload.get("issuetype", "Bug")},
                 "priority": {"name": payload.get("priority", "High")},
             }
         }
         response = httpx.post(url, json=body, auth=auth, timeout=30.0)
-        response.raise_for_status()
+        
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            details = None
+            try:
+                details = response.json()
+            except ValueError:
+                details = response.text
+            raise RuntimeError(
+                f"JIRA API error {response.status_code}: {details}. Payload: {json.dumps(body)}"
+            ) from exc
+        
         data = response.json()
         issue_key = data.get("key")
         issue_url = f"{self.settings.jira_base_url.rstrip('/')}/browse/{issue_key}"
