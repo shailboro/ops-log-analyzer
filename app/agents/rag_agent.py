@@ -7,11 +7,11 @@ from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.types import Send
 
 from app.config import get_settings
-from app.graph.state import State
+from app.graph.state import AgentState
 from app.rag import embed_issue, query_similar_incidents, query_trend_analysis
 
 
-async def rag_agent(state: State) -> dict[str, Any]:
+async def rag_agent(state: AgentState) -> dict[str, Any]:
     """
     RAG agent that retrieves similar past incidents and trend analysis.
     
