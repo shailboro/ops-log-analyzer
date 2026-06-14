@@ -69,6 +69,8 @@ class AgentState(TypedDict):
     entries: list[LogEntry]
     issues: list[DetectedIssue]
     remediations: list[Remediation]
+    rag_context: list[dict[str, Any]]
+    rag_insights: dict[str, Any]
     cookbook_markdown: str
     slack_payloads: list[dict[str, Any]]
     jira_tickets: list[dict[str, Any]]
@@ -88,6 +90,8 @@ def initial_state(run_id: str, raw_logs: str, filename: str | None = None) -> Ag
         entries=[],
         issues=[],
         remediations=[],
+        rag_context=[],
+        rag_insights={},
         cookbook_markdown="",
         slack_payloads=[],
         jira_tickets=[],

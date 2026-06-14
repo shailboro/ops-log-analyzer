@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     email_from: str | None = None
     email_to: str | None = None
 
+    pinecone_api_key: str | None = None
+    pinecone_index_name: str = "ops-log-analyzer"
+    pinecone_environment: str = "us-east-1"
+
     runs_dir: str = "runs"
 
     @model_validator(mode="after")
@@ -64,6 +68,10 @@ class Settings(BaseSettings):
             and self.email_from
             and self.email_to
         )
+
+    @property
+    def rag_configured(self) -> bool:
+        return bool(self.pinecone_api_key and self.pinecone_index_name)
 
     @model_validator(mode="after")
     def validate_email_settings(self) -> "Settings":

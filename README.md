@@ -153,6 +153,89 @@ The FastAPI backend and a static web UI deploy to [Vercel](https://vercel.com). 
 
 On Vercel, analysis runs synchronously in the `/analyze` request (up to 300s). Run state is stored under `/tmp/runs` for the duration of the function instance.
 
+## RAG (Retrieval-Augmented Generation)
+
+Enable Pinecone-powered RAG to retrieve similar past incidents and trend analysis automatically during analysis.
+
+### Why RAG?
+
+- **Faster fixes** — Reference proven remediations from similar past incidents
+- **Consistency** — Leverage organizational knowledge base of solutions
+- **Pattern detection** — Identify recurring issues and trends over time
+- **Context-aware** — LLM generates fixes informed by historical precedent
+
+### Setup
+
+1. Get a Pinecone API key:
+   - Sign up at https://www.pinecone.io
+   - Create a serverless index
+   - Copy your API key
+
+2. Add to `.env`:
+   ```
+   PINECONE_API_KEY=your-api-key
+   PINECONE_INDEX_NAME=ops-log-analyzer
+   PINECONE_ENVIRONMENT=us-east-1
+   ```
+
+3. On Vercel, add these environment variables via the dashboard:
+   ```bash
+   vercel env add PINECONE_API_KEY production
+   ```
+
+### How It Works
+
+**RAG Agent** runs after Log Reader and before Remediation:
+
+1. **Embed** — Converts each detected issue into a vector embedding
+2. **Retrieve** — Queries Pinecone for top 3 similar past incidents (by severity)
+3. **Augment** — Passes similar incidents + trend analysis to Remediation LLM
+4. **Store** — After analysis, embeds issues + fixes and stores in Pinecone
+
+**Remediation Agent** receives RAG context:
+- Similar incidents from past 7 days
+- Proven fix steps for analogous issues
+- Trend metrics (total incidents this week, severity breakdown)
+
+### Outputs
+
+When RAG is enabled and issues are found, the run output includes:
+
+```json
+{
+  "rag_insights": {
+    "mode": "live",
+    "total_issues": 3,
+    "similar_found": 6,
+    "trends": {
+      "period_days": 7,
+      "total_issues": 15,
+      "by_severity": {
+        "critical": 2,
+        "high": 4,
+        "medium": 9
+      }
+    }
+  },
+  "rag_context": [
+    {
+      "current_issue_id": "issue_1",
+      "current_issue_title": "OOMKilled container",
+      "similar_incidents": [
+        {
+          "id": "issue_prev_5",
+          "title": "Memory limit exceeded",
+          "severity": "high",
+          "score": 0.92
+        }
+      ]
+    }
+  ]
+}
+```
+
+If RAG is not configured, the analyzer still works — it skips RAG and runs in mock mode.
+
 ## License
 
 MIT — hackathon demo project.
