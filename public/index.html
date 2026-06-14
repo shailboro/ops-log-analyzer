@@ -271,13 +271,17 @@
       const slack = state.slack_payloads || [];
       const jira = state.jira_tickets || [];
       const email = state.email_payloads || [];
+      const emailResults = state.email_results || [];
+      const emailMode = emailResults.length ? emailResults[0].mode : "mock";
       document.getElementById("outputs").innerHTML = `
         <h3>Slack</h3>
         ${slack.length ? `<pre>${JSON.stringify(slack, null, 2)}</pre>` : "<p>No Slack payloads.</p>"}
         <h3>JIRA</h3>
         ${jira.length ? `<pre>${JSON.stringify(jira, null, 2)}</pre>` : "<p>No JIRA tickets.</p>"}
         <h3>Email</h3>
+        <p class="status">Email mode: ${emailMode}</p>
         ${email.length ? `<pre>${JSON.stringify(email, null, 2)}</pre>` : "<p>No Email payloads.</p>"}
+        ${emailResults.length ? `<h4>Email send results</h4><pre>${JSON.stringify(emailResults, null, 2)}</pre>` : ""}
       `;
     }
 

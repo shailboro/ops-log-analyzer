@@ -27,12 +27,7 @@ class Settings(BaseSettings):
     jira_api_token: str | None = None
     jira_project_key: str | None = None
 
-    email_smtp_host: str | None = None
-    email_smtp_port: int | None = None
-    email_smtp_username: str | None = None
-    email_smtp_password: str | None = None
-    email_use_tls: bool = True
-    email_use_ssl: bool = False
+    resend_api_key: str | None = None
 
     email_from: str | None = None
     email_to: str | None = None
@@ -65,8 +60,7 @@ class Settings(BaseSettings):
     @property
     def email_configured(self) -> bool:
         return bool(
-            self.email_smtp_host
-            and self.email_smtp_port
+            self.resend_api_key
             and self.email_from
             and self.email_to
         )

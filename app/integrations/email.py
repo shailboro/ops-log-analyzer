@@ -1,9 +1,8 @@
 import json
-import smtplib
-import ssl
-from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 from app.config import get_settings
 
@@ -29,8 +28,7 @@ class EmailClient:
         }
 
     def _send_live(self, payload: dict[str, Any]) -> dict[str, Any]:
-        assert self.settings.email_smtp_host
-        assert self.settings.email_smtp_port
+        assert self.settings.resend_api_key
         assert self.settings.email_from
         assert self.settings.email_to
 
@@ -38,45 +36,35 @@ class EmailClient:
         if not recipients:
             raise ValueError("EMAIL_TO must contain at least one recipient")
 
-        message = EmailMessage()
-        message["Subject"] = payload.get("subject", "Ops Log Analyzer Notification")
-        message["From"] = self.settings.email_from
-        message["To"] = ", ".join(recipients)
-        body = payload.get("body", "")
+        request_payload: dict[str, Any] = {
+            "from": self.settings.email_from,
+            "to": recipients,
+            "subject": payload.get("subject", "Ops Log Analyzer Notification"),
+            "text": payload.get("body", ""),
+        }
         html_body = payload.get("html_body")
-        message.set_content(body)
         if html_body:
-            message.add_alternative(html_body, subtype="html")
+            request_payload["html"] = html_body
 
-        context = ssl.create_default_context()
-        if self.settings.email_use_ssl:
-            server = smtplib.SMTP_SSL(
-                self.settings.email_smtp_host,
-                self.settings.email_smtp_port,
-                context=context,
-                timeout=30,
-            )
-        else:
-            server = smtplib.SMTP(
-                self.settings.email_smtp_host,
-                self.settings.email_smtp_port,
-                timeout=30,
-            )
-            if self.settings.email_use_tls:
-                server.starttls(context=context)
+        headers = {
+            "Authorization": f"Bearer {self.settings.resend_api_key}",
+            "Content-Type": "application/json",
+        }
 
-        try:
-            if self.settings.email_smtp_username and self.settings.email_smtp_password:
-                server.login(self.settings.email_smtp_username, self.settings.email_smtp_password)
-            send_result = server.send_message(message)
-        finally:
-            server.quit()
+        response = httpx.post(
+            "https://api.resend.com/emails",
+            json=request_payload,
+            headers=headers,
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        data = response.json()
 
         return {
             "mode": "live",
-            "id": message["Message-ID"],
+            "id": data.get("id"),
             "to": recipients,
-            "sent_count": len(send_result) if isinstance(send_result, dict) else 0,
+            "response": data,
         }
 
 

@@ -110,12 +110,7 @@ JIRA_PROJECT_KEY=OPS
 **Email:**
 
 ```
-EMAIL_SMTP_HOST=smtp.example.com
-EMAIL_SMTP_PORT=587
-EMAIL_SMTP_USERNAME=your-smtp-user
-EMAIL_SMTP_PASSWORD=your-smtp-password
-EMAIL_USE_TLS=true
-EMAIL_USE_SSL=false
+RESEND_API_KEY=your-resend-api-key
 EMAIL_FROM=ops-alerts@example.com
 EMAIL_TO=team@example.com
 ```
@@ -144,8 +139,11 @@ The FastAPI backend and a static web UI deploy to [Vercel](https://vercel.com). 
    ```
 3. Set environment variables in the Vercel dashboard (or via CLI):
    ```bash
-   vercel env add OPENROUTER_API_KEY
+   vercel env add OPENROUTER_API_KEY production
    vercel env add LLM_PROVIDER production
+   vercel env add RESEND_API_KEY production
+   vercel env add EMAIL_FROM production
+   vercel env add EMAIL_TO production
    ```
    Use `openrouter` for `LLM_PROVIDER`.
 4. Deploy:
