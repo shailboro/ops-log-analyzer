@@ -1,7 +1,7 @@
 import os
 from functools import lru_cache
 
-from pydantic import EmailStr, model_validator
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     resend_api_key: str | None = None
 
-    email_from: EmailStr | None = None
+    email_from: str | None = None
     email_to: str | None = None
 
     runs_dir: str = "runs"
@@ -73,6 +73,8 @@ class Settings(BaseSettings):
             recipients = [address.strip() for address in self.email_to.split(",") if address.strip()]
             if not recipients:
                 raise ValueError("EMAIL_TO must contain at least one recipient")
+            if self.email_from and "@" not in self.email_from:
+                raise ValueError("EMAIL_FROM must be a valid email address")
         return self
 
     @property
