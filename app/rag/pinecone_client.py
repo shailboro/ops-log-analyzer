@@ -1,6 +1,6 @@
 """Pinecone client for RAG vector storage and retrieval."""
 
-import json
+import os
 from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any
@@ -11,6 +11,28 @@ from app.config import get_settings
 
 
 @lru_cache(maxsize=1)
+def _resolve_pinecone_host(settings) -> str | None:
+    if settings.pinecone_host:
+        return settings.pinecone_host
+
+    env_host = os.environ.get("PINECONE_CONTROLLER_HOST")
+    if env_host:
+        return env_host
+
+    environment = settings.pinecone_environment
+    if not environment:
+        return None
+
+    environment = environment.strip()
+    if environment.startswith("https://") or environment.startswith("http://"):
+        return environment
+    if environment.endswith(".pinecone.io"):
+        return f"https://{environment}" if not environment.startswith("https://") else environment
+    if environment.startswith("controller."):
+        return f"https://{environment}"
+    return f"https://controller.{environment}.pinecone.io"
+
+
 def get_pinecone_client() -> Pinecone | None:
     """
     Get or initialize Pinecone client.
@@ -23,7 +45,7 @@ def get_pinecone_client() -> Pinecone | None:
     if not settings.pinecone_api_key:
         return None
     
-    return Pinecone(api_key=settings.pinecone_api_key)
+    return Pinecone(api_key=settings.pinecone_api_key, host=_resolve_pinecone_host(settings))
 
 
 async def init_pinecone() -> bool:
@@ -105,15 +127,16 @@ async def upsert_incident(
     }
     
     vector_id = f"{run_id}_{issue_id}_issue"
-    index.upsert([(vector_id, embedding, metadata)])
+    index.upsert(vectors=[(vector_id, embedding, metadata)])
     
     # Store remediation if provided
     if remediation:
-        metadata["type"] = "remediation"
-        metadata["remediation"] = remediation
+        remediation_metadata = metadata.copy()
+        remediation_metadata["type"] = "remediation"
+        remediation_metadata["remediation"] = remediation
         
         vector_id_rem = f"{run_id}_{issue_id}_remediation"
-        index.upsert([(vector_id_rem, embedding, metadata)])
+        index.upsert(vectors=[(vector_id_rem, embedding, remediation_metadata)])
     
     return True
 

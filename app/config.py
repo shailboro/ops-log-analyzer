@@ -34,7 +34,8 @@ class Settings(BaseSettings):
 
     pinecone_api_key: str | None = None
     pinecone_index_name: str = "ops-log-analyzer"
-    pinecone_environment: str = "us-east-1"
+    pinecone_environment: str | None = None
+    pinecone_host: str | None = None
 
     runs_dir: str = "runs"
 

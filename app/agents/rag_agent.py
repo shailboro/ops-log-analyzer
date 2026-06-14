@@ -7,7 +7,7 @@ from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.types import Send
 
 from app.config import get_settings
-from app.graph.state import AgentState
+from app.graph.state import AgentState, DetectedIssue
 from app.rag import embed_issue, query_similar_incidents, query_trend_analysis
 
 
@@ -54,29 +54,29 @@ async def rag_agent(state: AgentState) -> dict[str, Any]:
             try:
                 # Embed the current issue
                 embedding = await embed_issue({
-                    "id": issue.get("id"),
-                    "title": issue.get("title", ""),
-                    "description": issue.get("description", ""),
-                    "severity": issue.get("severity", "unknown"),
+                    "id": issue.id,
+                    "title": issue.title,
+                    "description": issue.summary,
+                    "severity": issue.severity,
                 })
                 
                 # Query for similar incidents
                 similar = await query_similar_incidents(
                     embedding=embedding,
                     top_k=3,
-                    severity_filter=issue.get("severity"),
+                    severity_filter=issue.severity,
                 )
                 
                 if similar:
                     total_similar += len(similar)
                     rag_context.append({
-                        "current_issue_id": issue.get("id"),
-                        "current_issue_title": issue.get("title"),
+                        "current_issue_id": issue.id,
+                        "current_issue_title": issue.title,
                         "similar_incidents": similar,
                     })
             except Exception as e:
                 # Log but don't fail on per-issue errors
-                print(f"Error retrieving similar incidents for issue {issue.get('id')}: {e}")
+                print(f"Error retrieving similar incidents for issue {issue.id if hasattr(issue, 'id') else '<unknown>'}: {e}")
                 continue
         
         return {
